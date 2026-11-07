@@ -2,7 +2,7 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Maze Catch</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -27,6 +27,8 @@
     gap: 10px; padding-block: 12px; overflow-x: hidden; overflow-y: auto;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
   #hud { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .chip {
@@ -48,6 +50,30 @@
   .cap.up { grid-column: 2; }
   .cap.left { grid-column: 1; }
   .cap.down-on { background: var(--cream); color: var(--night); }
+  .tag { grid-column: 1 / -1; text-align: center; font-size: 12px; font-weight: 700; color: var(--night);
+         background: var(--wall); border-radius: 5px; padding: 3px 0; }
+  .tag.away { background: var(--cap); color: var(--muted); }
+  .orarrows { grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--muted); margin-top: -2px; }
+  #arena { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .pads { display: flex; flex-direction: column; gap: 14px; }
+  .pads:empty { display: none; }
+  .pad {
+    position: relative; width: 150px; height: 150px; border-radius: 50%; flex: none;
+    border: 4px solid var(--c); background: radial-gradient(circle, #2B303B 0 55%, #22262F 56%);
+    touch-action: none;
+  }
+  .pad .knob {
+    position: absolute; left: 30%; top: 30%; width: 40%; height: 40%; border-radius: 50%;
+    background: var(--c); box-shadow: 0 3px 10px rgba(0, 0, 0, .5); pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--night); font-weight: 800; font-size: 13px;
+  }
+  .pad .ar { position: absolute; color: var(--muted); font-size: 18px; line-height: 1; pointer-events: none; opacity: .7; }
+  .pad .ar.U { top: 6%; left: 50%; transform: translateX(-50%); }
+  .pad .ar.D { bottom: 6%; left: 50%; transform: translateX(-50%); }
+  .pad .ar.L { left: 7%; top: 50%; transform: translateY(-50%); }
+  .pad .ar.R { right: 7%; top: 50%; transform: translateY(-50%); }
+  .pad[data-dir="U"] .ar.U, .pad[data-dir="D"] .ar.D, .pad[data-dir="L"] .ar.L, .pad[data-dir="R"] .ar.R { color: var(--c); opacity: 1; }
   #stage { position: relative; line-height: 0; }
   canvas { display: block; border-radius: 8px; }
   #banner {
@@ -60,18 +86,32 @@
   #overlay {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(22, 24, 29, .88); border-radius: 8px; line-height: 1.4; padding: 16px; text-align: center;
+    overflow-y: auto;
   }
+  #overlay > div { margin: auto; }
   #overlay.hide { display: none; }
   #overlay h1 { font-size: 44px; line-height: 1.1; margin: 0 0 6px; color: var(--wall); }
   #overlay h2 { font-size: 34px; line-height: 1.15; margin: 0 0 8px; color: var(--wall); }
   #overlay p { margin: 6px auto; max-width: 560px; }
   #count { font-size: 110px; font-weight: 800; color: var(--cream); line-height: 1; }
-  .pick { display: flex; gap: 10px; justify-content: center; margin: 14px 0; }
+  .pick { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 14px 0; }
   button {
     font: inherit; font-weight: 700; color: var(--cream); background: var(--panel);
     border: 2px solid var(--wall); border-radius: 10px; padding: 10px 18px; cursor: pointer;
+    touch-action: manipulation;
   }
   button.sel { background: var(--wall); color: var(--night); }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--cream); outline-offset: 2px; }
+  input {
+    font: inherit; font-size: 22px; font-weight: 800; letter-spacing: .25em; text-transform: uppercase; text-align: center;
+    width: 140px; padding: 8px; border-radius: 10px; border: 2px solid var(--wall);
+    background: var(--night); color: var(--cream); -webkit-user-select: text; user-select: text;
+  }
+  .code { font-size: 64px; font-weight: 800; letter-spacing: .15em; color: var(--cream); line-height: 1.1; }
+  .link { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted);
+          -webkit-user-select: all; user-select: all; word-break: break-all; }
+  .seats { display: grid; grid-template-columns: auto auto; gap: 2px 16px; justify-content: center; margin: 8px 0; text-align: left; }
+  .status { color: var(--wall); font-weight: 600; }
   .hint { color: var(--muted); font-size: 14px; }
   #bar { display: flex; gap: 24px; align-items: center; justify-content: center; min-height: 26px; flex-wrap: wrap; }
   #bar .c { color: var(--catcher); font-weight: 700; }
@@ -81,10 +121,14 @@
 </head>
 <body>
   <div id="hud"></div>
-  <div id="stage">
-    <canvas id="c"></canvas>
-    <div id="banner"></div>
-    <div id="overlay"></div>
+  <div id="arena">
+    <div class="pads" id="padsL"></div>
+    <div id="stage">
+      <canvas id="c"></canvas>
+      <div id="banner"></div>
+      <div id="overlay"></div>
+    </div>
+    <div class="pads" id="padsR"></div>
   </div>
   <div id="bar"></div>
 
@@ -100,6 +144,9 @@ const CAUGHT_WAIT = 1.2;          // seconds a newly caught player waits
 const CATCH_DISTANCE = 0.55;      // how close counts as a catch, in squares
 const BODY_SIZE = 0.7;            // how close team-mates can get before they bump, in squares
 const PUSH_FACTOR = 0.5;          // pushing speed: 0.5 is half speed for both players
+const PAD_DEAD_ZONE = 0.12;       // touch pad: how far from the middle before it counts, 0 to 0.5
+const MAX_GUESTS = 3;             // online: how many other devices can join
+const SNAPS_PER_SECOND = 30;      // online: how often the host sends the game to the others
 
 // How fast each side moves, by how many catchers there are.
 // More catchers means slower catchers and faster runners.
@@ -110,15 +157,15 @@ const SPEEDS = {
 };
 
 // All four sets are the same shape: top key is up, bottom row is left, down, right.
-// seat is the order along the keyboard, left to right, so the screen matches the hands.
+// order is where the keys sit along the keyboard, left to right, so the screen matches the hands.
 const PLAYERS = [
-  { name: 'Blue',   color: '#4FA8FF', seat: 1,
+  { name: 'Blue',   color: '#4FA8FF', order: 1,
     keys: { KeyW: 'U', KeyS: 'D', KeyA: 'L', KeyD: 'R' } },
-  { name: 'Green',  color: '#4ADE80', seat: 2,
+  { name: 'Green',  color: '#4ADE80', order: 2,
     keys: { KeyY: 'U', KeyH: 'D', KeyG: 'L', KeyJ: 'R' } },
-  { name: 'Orange', color: '#FFB02E', seat: 4,
+  { name: 'Orange', color: '#FFB02E', order: 4,
     keys: { ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R' } },
-  { name: 'Pink',   color: '#F472D0', seat: 3,
+  { name: 'Pink',   color: '#F472D0', order: 3,
     keys: { KeyP: 'U', Semicolon: 'D', KeyL: 'L', Quote: 'R' } },
 ];
 
@@ -198,6 +245,8 @@ let firstCaught = null;
 let nextCatcher = null;
 let bannerUntil = 0;
 let rings = [];
+let overTitle = '';
+let roundId = 0;        // goes up each time the maze changes, so online players get the new one
 
 function catchers() { return players.filter(p => p.role === 'catcher'); }
 function runners() { return players.filter(p => p.role === 'runner'); }
@@ -208,6 +257,7 @@ function speedOf(p) {
 
 function startRound() {
   maze = buildMaze();
+  roundId++;
   const start = nextCatcher === null ? Math.floor(Math.random() * count) : nextCatcher;
   const corners = shuffled([[0, 0], [COLS - 1, 0], [0, ROWS - 1], [COLS - 1, ROWS - 1]]);
   players = [];
@@ -221,10 +271,13 @@ function startRound() {
       ...PLAYERS[i],
     });
   }
+  // Keys or pads already held down keep working in the new round.
+  for (const code in keyHeld) applyPress(keyHeld[code].seat, keyHeld[code].d);
   timeLeft = ROUND_TIME;
   countdown = 3;
   firstCaught = null;
   rings = [];
+  overTitle = '';
   state = 'countdown';
   beep(440, .1);
   renderOverlay();
@@ -376,18 +429,17 @@ function caught(r) {
 function endRound(lastCaught) {
   state = 'over';
   const left = runners();
-  let title;
   if (lastCaught) {
     wins[lastCaught.i]++;
-    title = `${lastCaught.name} lasted the longest and wins!`;
+    overTitle = `${lastCaught.name} lasted the longest and wins!`;
   } else {
     left.forEach(p => wins[p.i]++);
-    title = `Time is up! ${left.map(p => p.name).join(' and ')} got away!`;
+    overTitle = `Time is up! ${left.map(p => p.name).join(' and ')} got away!`;
   }
   // First player caught starts as the catcher next round.
   const pick = firstCaught !== null ? firstCaught : (catchers()[0].i + 1) % count;
   nextCatcher = pick;
-  renderOverlay(title);
+  renderOverlay();
   renderHud();
   beep(523, .15); beep(659, .15, .15); beep(784, .3, .3);
 }
@@ -396,10 +448,7 @@ function update(dt) {
   clock += dt;
   for (const ring of rings) ring.age += dt;
   rings = rings.filter(r => r.age < .7);
-  if (bannerUntil && clock > bannerUntil) {
-    bannerUntil = 0;
-    document.getElementById('banner').classList.remove('on');
-  }
+  tickBanner();
   if (state === 'countdown') {
     const before = Math.ceil(countdown);
     countdown -= dt;
@@ -422,10 +471,45 @@ function update(dt) {
   renderBar();
 }
 
+// ---------- Who controls which player ----------
+// A seat is one player: 0 Blue, 1 Green, 2 Orange, 3 Pink.
+// Offline, this device has every seat. Online, the host gives seats to the other devices.
+function localSeats() {
+  const all = [0, 1, 2, 3].slice(0, count);
+  if (net.mode === 'guest') return net.mySeats.filter(s => s < count);
+  if (net.mode === 'host') return all.filter(s => owner[s] === 'host');
+  return all;
+}
+function isLocal(seat) { return localSeats().includes(seat); }
+
+// Every press and let-go goes through here, from keys, touch pads, or the network.
+function pressDir(seat, d) {
+  if (net.mode === 'guest') { sendToHost({ t: 'in', seat, d, down: true }); return; }
+  applyPress(seat, d);
+}
+function releaseDir(seat, d) {
+  if (net.mode === 'guest') { sendToHost({ t: 'in', seat, d, down: false }); return; }
+  applyRelease(seat, d);
+}
+function applyPress(seat, d) {
+  const p = players[seat];
+  if (!p) return;
+  p.held = p.held.filter(x => x !== d);
+  p.held.push(d);
+  p.queued = d;
+  p.queuedAt = clock;
+}
+function applyRelease(seat, d) {
+  const p = players[seat];
+  if (!p) return;
+  p.held = p.held.filter(x => x !== d);
+}
+
 // ---------- Keys ----------
-const CAP_TEXT = { ArrowUp: '\u2191', ArrowDown: '\u2193', ArrowLeft: '\u2190', ArrowRight: '\u2192', Semicolon: ';', Quote: "'" };
+const CAP_TEXT = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Semicolon: ';', Quote: "'" };
 const capText = code => CAP_TEXT[code] || code.replace('Key', '');
 const keysDown = new Set();
+const keyHeld = {};     // which seat and direction each held key is moving, so letting go undoes the same thing
 function lightCap(code, on) {
   if (on) keysDown.add(code); else keysDown.delete(code);
   const cap = document.getElementById('cap-' + code);
@@ -434,40 +518,69 @@ function lightCap(code, on) {
 const taken = {};
 PLAYERS.forEach((pl, i) => { for (const code in pl.keys) taken[code] = { i, d: pl.keys[code] }; });
 
+// If this device has just one player, both W A S D and the arrow keys move it.
+// Otherwise each player uses the keys of their own colour.
+function keyMap() {
+  const seats = localSeats(), map = {};
+  if (seats.length === 1) {
+    for (const set of [PLAYERS[0].keys, PLAYERS[2].keys]) for (const code in set) map[code] = { seat: seats[0], d: set[code] };
+  } else {
+    for (const s of seats) for (const code in PLAYERS[s].keys) map[code] = { seat: s, d: PLAYERS[s].keys[code] };
+  }
+  return map;
+}
+function canRunGame() { return net.mode !== 'guest'; }
+
 addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  wakeSound();
-  if (taken[e.code] || e.code === 'Space') e.preventDefault();
-  if (e.repeat) return;
-  if (taken[e.code]) lightCap(e.code, true);
-  if (e.code === 'KeyM') { muted = !muted; return; }
-  if (state === 'menu') {
-    if (e.code === 'Digit3') { count = 3; renderOverlay(); renderHud(); }
-    if (e.code === 'Digit4') { count = 4; renderOverlay(); renderHud(); }
+  if (e.target && e.target.tagName === 'INPUT') {            // typing a join code
+    if (e.key === 'Enter') joinGame(e.target.value);
+    return;
   }
-  if ((e.code === 'Space' || e.code === 'Enter') && (state === 'menu' || state === 'over')) {
+  wakeSound();
+  const k = keyMap()[e.code];
+  if (k || taken[e.code] || e.code === 'Space') e.preventDefault();
+  if (e.repeat) return;
+  if (k) lightCap(e.code, true);
+  if (e.code === 'KeyM') { muted = !muted; renderOverlay(); return; }
+  if (state === 'menu' && canRunGame() && menuView === 'main') {
+    if (e.code === 'Digit3') setCount(3);
+    if (e.code === 'Digit4') setCount(4);
+  }
+  if ((e.code === 'Space' || e.code === 'Enter') && (state === 'menu' || state === 'over') && canRunGame() && menuView === 'main') {
     startRound();
     return;
   }
-  if (e.code === 'Escape' && state !== 'menu') { backToMenu(); return; }
-  const k = taken[e.code];
-  if (!k || !players[k.i]) return;
-  const p = players[k.i];
-  p.held = p.held.filter(d => d !== k.d);
-  p.held.push(k.d);
-  p.queued = k.d;
-  p.queuedAt = clock;
+  if (e.code === 'Escape') {
+    if (net.mode === 'guest') { leaveOnline('You left the game.'); return; }
+    if (state !== 'menu') { backToMenu(); return; }
+  }
+  if (!k) return;
+  keyHeld[e.code] = k;
+  pressDir(k.seat, k.d);
 });
 addEventListener('keyup', e => {
-  if (taken[e.code]) lightCap(e.code, false);
-  const k = taken[e.code];
-  if (!k || !players[k.i]) return;
-  players[k.i].held = players[k.i].held.filter(d => d !== k.d);
+  lightCap(e.code, false);
+  const k = keyHeld[e.code];
+  if (!k) return;
+  delete keyHeld[e.code];
+  releaseDir(k.seat, k.d);
 });
-addEventListener('blur', () => {
+addEventListener('blur', releaseEverything);
+
+function releaseEverything() {
   [...keysDown].forEach(code => lightCap(code, false));
-  players.forEach(p => { p.held = []; p.queued = null; });
-});
+  for (const code in keyHeld) { releaseDir(keyHeld[code].seat, keyHeld[code].d); delete keyHeld[code]; }
+  document.querySelectorAll('.pad').forEach(pad => pad.letGo && pad.letGo());
+  if (net.mode !== 'guest') players.forEach(p => { p.held = []; p.queued = null; });
+}
+
+function setCount(n) {
+  count = n;
+  if (net.mode === 'host') balanceSeats();
+  renderOverlay();
+  renderHud();
+}
 
 function backToMenu() {
   state = 'menu';
@@ -475,9 +588,319 @@ function backToMenu() {
   wins = [0, 0, 0, 0];
   nextCatcher = null;
   maze = buildMaze();
+  roundId++;
   renderOverlay();
   renderHud();
   renderBar();
+}
+
+// ---------- Touch pads ----------
+// A pad works like a joystick: put a finger on it and slide towards where you want to go.
+// Each pad follows only one finger, so four people can play on one iPad.
+let touchMode = navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
+addEventListener('pointerdown', e => {
+  wakeSound();
+  if (e.pointerType === 'touch' && !touchMode) { touchMode = true; renderHud(); }
+}, true);
+document.addEventListener('gesturestart', e => e.preventDefault());       // no pinch zoom on iPad
+document.addEventListener('touchmove', e => { if (e.target.closest && e.target.closest('.pad')) e.preventDefault(); }, { passive: false });
+
+function showPads() { return touchMode && state !== 'menu' && players.length > 0; }
+
+let padSig = '';
+function renderPads() {
+  const seats = showPads() ? localSeats().slice().sort((a, b) => PLAYERS[a].order - PLAYERS[b].order) : [];
+  const sig = seats.join(',');
+  if (sig === padSig) return;                     // only rebuild when the seats change, so fingers stay put
+  padSig = sig;
+  document.querySelectorAll('.pad').forEach(pad => pad.letGo && pad.letGo());
+  const half = Math.ceil(seats.length / 2);
+  const make = s => `<div class="pad" id="pad-${s}" style="--c:${PLAYERS[s].color}">
+    <span class="ar U">▲</span><span class="ar D">▼</span><span class="ar L">◀</span><span class="ar R">▶</span>
+    <div class="knob">${PLAYERS[s].name}</div></div>`;
+  $('padsL').innerHTML = seats.slice(0, half).map(make).join('');
+  $('padsR').innerHTML = seats.slice(half).map(make).join('');
+  seats.forEach(s => attachPad($('pad-' + s), s));
+}
+
+function attachPad(el, seat) {
+  const knob = el.querySelector('.knob');
+  let finger = null, current = null;
+  const go = d => {
+    if (d === current) return;
+    if (current) releaseDir(seat, current);
+    current = d;
+    if (d) pressDir(seat, d);
+    el.dataset.dir = d || '';
+  };
+  const aim = e => {
+    const r = el.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const len = Math.hypot(dx, dy), reach = r.width * .3;
+    const k = len > reach ? reach / len : 1;
+    knob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+    if (len < r.width * PAD_DEAD_ZONE) return go(null);
+    go(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'));
+  };
+  el.letGo = () => { finger = null; go(null); knob.style.transform = ''; };
+  const end = e => { if (e.pointerId === finger) el.letGo(); };
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (finger !== null) return;
+    finger = e.pointerId;
+    try { el.setPointerCapture(finger); } catch (err) { /* fine without it */ }
+    aim(e);
+  });
+  el.addEventListener('pointermove', e => { if (e.pointerId === finger) aim(e); });
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('lostpointercapture', end);
+}
+
+// ---------- Online ----------
+// One device is the host. It runs the game and sends it to the others about 30 times a second.
+// The others only send which way their players want to go. PeerJS links the devices directly.
+const PEER_PREFIX = 'ziranguo-mazecatch-';
+const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';     // no I or O, so no mix-ups with 1 and 0
+let net = { mode: 'local', peer: null, code: '', guests: [], conn: null, mySeats: [], free: 0, status: '' };
+let owner = ['host', 'host', 'host', 'host'];         // host side: who has each seat
+let menuView = 'main';                                 // main or online
+let outbox = [];                                       // banners and sounds for the other devices
+let snapTimer = 0;
+
+function newCode() {
+  let c = '';
+  for (let i = 0; i < 4; i++) c += CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)];
+  return c;
+}
+function shareLink(code) { return location.href.split('#')[0] + '#' + code; }
+
+let peerScript = null;
+function loadPeerJs() {
+  if (window.Peer) return Promise.resolve();
+  if (!peerScript) peerScript = new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    s.onload = ok;
+    s.onerror = () => { peerScript = null; fail(); };
+    document.head.appendChild(s);
+  });
+  return peerScript;
+}
+function setStatus(text) { net.status = text; renderOverlay(); }
+
+async function hostGame() {
+  setStatus('Connecting to the online server...');
+  try { await loadPeerJs(); } catch (e) { setStatus('Could not load online play. Check the internet and try again.'); return; }
+  tryHost(0);
+}
+
+function tryHost(attempt) {
+  const code = newCode();
+  const peer = new Peer(PEER_PREFIX + code, { debug: 0 });
+  peer.on('open', () => {
+    net = { mode: 'host', peer, code, guests: [], conn: null, mySeats: [], free: 0, status: '' };
+    owner = ['host', 'host', 'host', 'host'];
+    menuView = 'main';
+    backToMenu();
+  });
+  peer.on('connection', conn => hostAddGuest(conn));
+  peer.on('disconnected', () => { if (net.peer === peer && !peer.destroyed) { try { peer.reconnect(); } catch (e) { /* keep playing */ } } });
+  peer.on('error', err => {
+    if (net.peer === peer) { if (err.type === 'peer-unavailable') return; showBanner('Online trouble. The game keeps going.'); return; }
+    peer.destroy();
+    if (err.type === 'unavailable-id' && attempt < 5) tryHost(attempt + 1);
+    else setStatus('Could not reach the online server. Check the internet and try again.');
+  });
+}
+
+function seatsOf(id) { return [0, 1, 2, 3].filter(s => s < count && owner[s] === id); }
+function seatNames(seats) { return seats.map(s => PLAYERS[s].name).join(' and '); }
+
+// Hand seat s to a device. That player stops whatever the old owner was doing.
+function giveSeat(s, id) {
+  owner[s] = id;
+  if (players[s]) { players[s].held = []; players[s].queued = null; }
+  for (const code in keyHeld) if (keyHeld[code].seat === s) delete keyHeld[code];
+}
+
+// The highest seat still on the host. Seat 0 (Blue) always stays with the host.
+function freeSeat(borrow) {
+  for (let s = count - 1; s >= 1; s--) if (owner[s] === 'host') return s;
+  if (borrow) for (let s = count - 1; s >= 1; s--) if (owner[s] !== 'host' && seatsOf(owner[s]).length > 1) return s;
+  return null;
+}
+
+// Make sure every device that joined has a player, if there are enough to go round.
+function balanceSeats() {
+  for (let s = 0; s < 4; s++) if (s === 0 || s >= count || !net.guests.some(g => g.id === owner[s])) owner[s] = 'host';
+  for (const g of net.guests) {
+    if (seatsOf(g.id).length) continue;
+    const s = freeSeat(true);
+    if (s !== null) giveSeat(s, g.id);
+  }
+}
+
+function hostAddGuest(conn) {
+  let g = null;
+  conn.on('open', () => {
+    if (net.guests.length >= MAX_GUESTS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 500); return; }
+    g = { conn, id: conn.peer, round: -1 };
+    net.guests.push(g);
+    balanceSeats();
+    const mine = seatsOf(g.id);
+    showBanner(mine.length ? `${seatNames(mine)} joined from another device.` : 'Someone joined to watch.');
+    renderHud();
+    renderOverlay();
+  });
+  conn.on('data', msg => { if (g) hostOnMessage(g, msg); });
+  conn.on('close', () => { if (g) hostDropGuest(g); });
+  conn.on('error', () => { if (g) hostDropGuest(g); });
+}
+
+function hostOnMessage(g, msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.t === 'in') {
+    if (owner[msg.seat] !== g.id || !DIRS.includes(msg.d)) return;   // only your own players
+    if (msg.down) applyPress(msg.seat, msg.d); else applyRelease(msg.seat, msg.d);
+  }
+  if (msg.t === 'more') {
+    const s = freeSeat(false);
+    if (s === null) return;
+    giveSeat(s, g.id);
+    showBanner(`${PLAYERS[s].name} is now played on another device.`);
+    renderHud();
+    renderOverlay();
+  }
+}
+
+function hostDropGuest(g) {
+  const i = net.guests.indexOf(g);
+  if (i < 0) return;
+  net.guests.splice(i, 1);
+  const mine = seatsOf(g.id);
+  mine.forEach(s => giveSeat(s, 'host'));
+  balanceSeats();
+  if (mine.length) showBanner(`${seatNames(mine)} left. That player is back on this device.`);
+  renderHud();
+  renderOverlay();
+}
+
+const r3 = n => Math.round(n * 1000) / 1000;
+function snapshot() {
+  return {
+    t: 'snap', st: state, count, cd: r3(countdown), tl: r3(timeLeft), clock: r3(clock), wins, round: roundId,
+    title: overTitle, free: [1, 2, 3].filter(s => s < count && owner[s] === 'host').length,
+    players: players.map(p => ({ cx: p.cx, cy: p.cy, dir: p.dir, t: r3(p.t), x: r3(posX(p)), y: r3(posY(p)),
+      face: p.face, role: p.role, wait: r3(p.wait), pa: r3(p.pushingAt) })),
+    rings: rings.map(r => ({ x: r3(r.x), y: r3(r.y), age: r3(r.age), color: r.color })),
+    fx: outbox,
+  };
+}
+
+function hostTick(dt) {
+  snapTimer += dt;
+  if (snapTimer < 1 / SNAPS_PER_SECOND) return;
+  snapTimer = 0;
+  if (!net.guests.length) { outbox = []; return; }
+  const base = snapshot();
+  for (const g of net.guests) {
+    const msg = { ...base, mine: seatsOf(g.id) };
+    if (g.round !== roundId) { msg.maze = maze; g.round = roundId; }     // the maze only goes when it changes
+    try { g.conn.send(msg); } catch (e) { /* they will drop off */ }
+  }
+  outbox = [];
+}
+
+async function joinGame(code) {
+  code = String(code || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+  if (code.length !== 4) { setStatus('Type the 4 letter code.'); return; }
+  menuView = 'online';
+  setStatus(`Joining game ${code}...`);
+  try { await loadPeerJs(); } catch (e) { setStatus('Could not load online play. Check the internet and try again.'); return; }
+  const peer = new Peer({ debug: 0 });
+  let joined = false;
+  const giveUp = text => { if (joined) return; peer.destroy(); setStatus(text); };
+  const timer = setTimeout(() => giveUp('Could not connect. Check the code and the internet, then try again.'), 15000);
+  peer.on('open', () => {
+    const conn = peer.connect(PEER_PREFIX + code, { serialization: 'json', reliable: true });
+    conn.on('open', () => {
+      joined = true;
+      clearTimeout(timer);
+      net = { mode: 'guest', peer, code, guests: [], conn, mySeats: [], free: 0, status: '' };
+      menuView = 'main';
+      state = 'menu'; players = []; wins = [0, 0, 0, 0];
+      renderOverlay(); renderHud();
+    });
+    conn.on('data', msg => {
+      if (msg && msg.t === 'snap' && net.conn === conn) guestOnSnap(msg);
+      if (msg && msg.t === 'full') { joined = false; clearTimeout(timer); leaveOnline('That game is full.'); }
+    });
+    conn.on('close', () => { if (net.conn === conn) leaveOnline('The host left.'); });
+  });
+  peer.on('error', err => {
+    if (net.peer === peer) { if (net.mode === 'guest') leaveOnline('Lost the link to the host.'); return; }
+    clearTimeout(timer);
+    giveUp(err.type === 'peer-unavailable' ? 'No game with that code. Check the letters.' : 'Could not reach the online server. Check the internet and try again.');
+  });
+}
+
+function sendToHost(msg) {
+  if (net.conn && net.conn.open !== false) { try { net.conn.send(msg); } catch (e) { /* lost */ } }
+}
+
+function leaveOnline(text) {
+  releaseEverything();
+  const old = net;
+  net = { mode: 'local', peer: null, code: '', guests: [], conn: null, mySeats: [], free: 0, status: text || '' };
+  owner = ['host', 'host', 'host', 'host'];
+  try { if (old.conn) old.conn.close(); } catch (e) { /* gone */ }
+  try { if (old.peer) old.peer.destroy(); } catch (e) { /* gone */ }
+  if (/^#[A-Z]{4}$/i.test(location.hash)) history.replaceState(null, '', location.href.split('#')[0]);
+  menuView = 'main';
+  state = 'menu'; players = []; wins = [0, 0, 0, 0]; nextCatcher = null;
+  maze = buildMaze();
+  renderOverlay(); renderHud(); renderBar();
+}
+
+// Guests: copy what the host sent, and slide players smoothly between snapshots.
+let snapAt = 0, guestHudSig = '', guestOverlaySig = '';
+function guestOnSnap(m) {
+  if (m.maze) maze = m.maze;
+  state = m.st; count = m.count; wins = m.wins; timeLeft = m.tl; countdown = m.cd;
+  overTitle = m.title; clock = m.clock; rings = m.rings; roundId = m.round;
+  net.mySeats = m.mine || []; net.free = m.free || 0;
+  const old = players;
+  players = m.players.map((q, i) => {
+    const o = old[i];
+    let fx = q.x, fy = q.y;
+    if (o && o.rx !== undefined) {
+      fx = o.rx; fy = o.ry;
+      if (Math.abs(q.x - fx) > COLS / 2 || Math.abs(q.y - fy) > ROWS / 2) { fx = q.x; fy = q.y; }   // went through a gap
+    }
+    return { ...PLAYERS[i], i, cx: q.cx, cy: q.cy, dir: q.dir, t: q.t, face: q.face, role: q.role, wait: q.wait,
+      pushingAt: q.pa, held: [], fromX: fx, fromY: fy, toX: q.x, toY: q.y, rx: fx, ry: fy };
+  });
+  snapAt = performance.now();
+  for (const f of m.fx || []) {
+    if (f[0] === 'b') showBannerHere(f[1]);
+    if (f[0] === 's') beepHere(f[1], f[2], f[3]);
+  }
+  const hudSig = [state, count, wins, net.mySeats, players.map(p => p.role)].join('|');
+  if (hudSig !== guestHudSig) { guestHudSig = hudSig; renderHud(); }
+  const overlaySig = [state, count, Math.ceil(countdown), overTitle, net.mySeats, net.free, net.code].join('|');
+  if (overlaySig !== guestOverlaySig) { guestOverlaySig = overlaySig; renderOverlay(); }
+  renderBar();
+}
+
+function guestTick(dt) {
+  clock += dt;
+  tickBanner();
+  const k = Math.min(1, (performance.now() - snapAt) / (1000 / SNAPS_PER_SECOND));
+  for (const p of players) {
+    p.rx = p.fromX + (p.toX - p.fromX) * k;
+    p.ry = p.fromY + (p.toY - p.fromY) * k;
+  }
 }
 
 // ---------- Sound ----------
@@ -486,8 +909,13 @@ function wakeSound() {
   if (!audio) {
     try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; }
   }
+  if (audio && audio.state === 'suspended') audio.resume();
 }
 function beep(freq, length, delay = 0) {
+  if (net.mode === 'host' && net.guests.length) outbox.push(['s', freq, length, delay]);
+  beepHere(freq, length, delay);
+}
+function beepHere(freq, length, delay = 0) {
   if (!audio || muted) return;
   const when = audio.currentTime + delay;
   const osc = audio.createOscillator(), gain = audio.createGain();
@@ -504,58 +932,151 @@ function beep(freq, length, delay = 0) {
 const $ = id => document.getElementById(id);
 
 function showBanner(text) {
+  if (net.mode === 'host' && net.guests.length) outbox.push(['b', text]);
+  showBannerHere(text);
+}
+function showBannerHere(text) {
   $('banner').textContent = text;
   $('banner').classList.add('on');
   bannerUntil = clock + 2.5;
 }
+function tickBanner() {
+  if (bannerUntil && clock > bannerUntil) {
+    bannerUntil = 0;
+    $('banner').classList.remove('on');
+  }
+}
 
-function renderOverlay(title) {
+function seatList() {
+  return [0, 1, 2, 3].slice(0, count).map(s => {
+    const where = net.mode === 'host' ? (owner[s] === 'host' ? 'This device' : 'Another device')
+      : (net.mySeats.includes(s) ? 'You' : 'Another device');
+    return `<span style="color:${PLAYERS[s].color};font-weight:700">${PLAYERS[s].name}</span><span>${where}</span>`;
+  }).join('');
+}
+
+function renderOverlay() {
   const o = $('overlay');
   if (state === 'play') { o.className = 'hide'; o.innerHTML = ''; return; }
   o.className = '';
+  const leave = net.mode === 'guest' ? '<button id="leave">Leave</button>' : '';
   if (state === 'countdown') {
     const c = players.find(p => p.role === 'catcher');
     o.innerHTML = `<div><div id="count">${Math.max(1, Math.ceil(countdown))}</div>
-      <p><span style="color:${c.color};font-weight:700">${c.name}</span> is the catcher. Everyone else, run!</p></div>`;
+      <p>${c ? `<span style="color:${c.color};font-weight:700">${c.name}</span> is the catcher. ` : ''}Everyone else, run!</p></div>`;
     return;
   }
   if (state === 'over') {
-    o.innerHTML = `<div><h2>${title}</h2>
+    o.innerHTML = `<div><h2>${overTitle}</h2>
       <p>First one caught starts as the catcher next round.</p>
-      <p class="hint">Space for the next round. Esc for the menu.</p></div>`;
+      ${canRunGame()
+        ? `<div class="pick"><button id="next">Next round</button><button id="menu">Menu</button></div>
+           <p class="hint">Or press Space for the next round, Esc for the menu.</p>`
+        : `<p>Waiting for the host to start the next round.</p><div class="pick">${leave}</div>`}
+    </div>`;
+    wire();
     return;
   }
+  // The menus
+  const status = net.status ? `<p class="status">${net.status}</p>` : '';
+  const sound = `<button id="sound">Sound ${muted ? 'off' : 'on'}</button>`;
+  if (net.mode === 'guest') {
+    const mine = net.mySeats.filter(s => s < count);
+    o.innerHTML = `<div>
+      <h2>You are in game ${net.code}</h2>
+      <p>${mine.length ? `You play ${seatNames(mine)}.` : 'No free player right now. You can watch.'}</p>
+      <div class="seats">${seatList()}</div>
+      <p>Waiting for the host to start.</p>
+      <div class="pick">${net.free ? '<button id="more">Add another player on this device</button>' : ''}${leave}${sound}</div>
+      ${status}
+    </div>`;
+    wire();
+    return;
+  }
+  if (menuView === 'online') {
+    o.innerHTML = `<div>
+      <h2>Play online</h2>
+      <p>Play with people on other computers or iPads. One device hosts the game and the others join with its code.</p>
+      <div class="pick"><button id="host">Host a game</button></div>
+      <p>Or type a code to join a game:</p>
+      <div class="pick"><input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD"><button id="join">Join</button></div>
+      <div class="pick"><button id="back">Back</button></div>
+      ${status}
+    </div>`;
+    wire();
+    return;
+  }
+  const hosting = net.mode === 'host' ? `
+    <p>Your game code</p>
+    <div class="code">${net.code}</div>
+    <p class="link" id="link">${shareLink(net.code)}</p>
+    <div class="pick"><button id="copy">Copy link</button><button id="stop">Stop hosting</button></div>
+    <div class="seats">${seatList()}</div>
+    <p class="hint">Up to ${MAX_GUESTS} other devices can join with the code or the link.</p>` : '';
   o.innerHTML = `<div>
     <h1>Maze Catch</h1>
-    <p>One catcher chases everyone. Anyone caught joins the catchers.
+    ${net.mode === 'host' ? '' : `<p>One catcher chases everyone. Anyone caught joins the catchers.
        Each catch makes the catchers slower and the runners faster, so catchers need a plan.</p>
     <p>Team-mates block each other. Push them along like a rock, but you both go at half speed.</p>
-    <p>Gaps in the outer wall take you out one side and back in the other.</p>
+    <p>Gaps in the outer wall take you out one side and back in the other.</p>`}
+    ${hosting}
     <div class="pick">
       <button id="p3" class="${count === 3 ? 'sel' : ''}">3 players</button>
       <button id="p4" class="${count === 4 ? 'sel' : ''}">4 players</button>
     </div>
-    <p>Find your keys above. Sit in the same order as the players, left to right.</p>
-    <p><button id="go">Start (Space)</button></p>
-    <p class="hint">Press 3 or 4 to pick. M turns the sound on or off. You need a keyboard to play. If the keys do nothing, click the game first.</p>
+    <p>${touchMode ? 'Each player gets a touch pad next to the maze.' : 'Find your keys above. Sit in the same order as the players, left to right.'}</p>
+    <div class="pick"><button id="go">Start</button>${net.mode === 'host' ? '' : '<button id="online">Play online</button>'}${sound}</div>
+    ${status}
+    <p class="hint">${touchMode ? 'Keys work too if a keyboard is plugged in.' : 'Press 3 or 4 to pick and Space to start. M turns the sound on or off. If the keys do nothing, click the game first.'}</p>
   </div>`;
-  $('p3').onclick = () => { count = 3; renderOverlay(); renderHud(); };
-  $('p4').onclick = () => { count = 4; renderOverlay(); renderHud(); };
-  $('go').onclick = () => { wakeSound(); startRound(); };
+  wire();
 }
 
-function capsFor(p) {
-  const code = d => Object.keys(p.keys).find(c => p.keys[c] === d);
+// Connect the buttons that are on screen right now.
+function wire() {
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = () => { wakeSound(); fn(); }; };
+  on('p3', () => setCount(3));
+  on('p4', () => setCount(4));
+  on('go', startRound);
+  on('next', startRound);
+  on('menu', backToMenu);
+  on('sound', () => { muted = !muted; renderOverlay(); });
+  on('online', () => { menuView = 'online'; net.status = ''; renderOverlay(); });
+  on('back', () => { menuView = 'main'; net.status = ''; renderOverlay(); });
+  on('host', hostGame);
+  on('join', () => joinGame($('code').value));
+  on('stop', () => leaveOnline('You stopped hosting.'));
+  on('leave', () => leaveOnline('You left the game.'));
+  on('more', () => sendToHost({ t: 'more' }));
+  on('copy', () => {
+    const link = shareLink(net.code);
+    const pick = () => { const r = document.createRange(); r.selectNodeContents($('link')); getSelection().removeAllRanges(); getSelection().addRange(r); };
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => showBannerHere('Link copied.'), pick);
+    else pick();
+  });
+}
+
+function capsFor(seat) {
+  const solo = localSeats().length === 1;
+  const keys = solo ? PLAYERS[0].keys : PLAYERS[seat].keys;
+  const code = d => Object.keys(keys).find(c => keys[c] === d);
   const cap = (d, cls) => `<span class="cap ${cls} ${keysDown.has(code(d)) ? 'down-on' : ''}" id="cap-${code(d)}">${capText(code(d))}</span>`;
-  return `<div class="caps">${cap('U', 'up')}${cap('L', 'left')}${cap('D', '')}${cap('R', '')}</div>`;
+  return `<div class="caps">${cap('U', 'up')}${cap('L', 'left')}${cap('D', '')}${cap('R', '')}</div>${solo ? '<div class="orarrows">or the arrow keys</div>' : ''}`;
+}
+
+function controlsFor(seat) {
+  if (net.mode !== 'local' && !isLocal(seat)) return '<div class="tag away">Online</div>';
+  if (showPads()) return '<div class="tag">Touch</div>';
+  return capsFor(seat);
 }
 
 function renderHud() {
-  const list = players.length ? players : PLAYERS.slice(0, count).map(p => ({ ...p, role: null }));
-  $('hud').innerHTML = list.map((p, i) => `<div class="chip ${p.role === 'catcher' ? 'catcher' : ''}" style="order:${p.seat}">
+  const list = players.length ? players : PLAYERS.slice(0, count).map((p, i) => ({ ...p, i, role: null }));
+  $('hud').innerHTML = list.map((p, i) => `<div class="chip ${p.role === 'catcher' ? 'catcher' : ''}" style="order:${p.order}">
     <span class="dot" style="background:${p.color}"></span>
     <span><b>${p.name}</b><small>${p.role === 'catcher' ? 'Catcher' : p.role === 'runner' ? 'Running' : 'Ready'}</small></span>
-    <span class="wins">${wins[i]}</span>${capsFor(p)}</div>`).join('');
+    <span class="wins">${wins[i]}</span>${controlsFor(i)}</div>`).join('');
+  renderPads();
   renderBar();
   fit();
 }
@@ -576,9 +1097,16 @@ const PAD = 4;
 
 function fit() {
   const hudHeight = $('hud').offsetHeight;
-  if (S === lastFit.S && innerWidth === lastFit.w && innerHeight === lastFit.h && hudHeight === lastFit.hud) return;
-  S = Math.floor(Math.min((innerWidth - 32 - PAD * 2) / COLS, (innerHeight - hudHeight - 80 - PAD * 2) / ROWS));
-  S = Math.max(S, 18);
+  const pads = document.querySelectorAll('.pad');
+  const perColumn = Math.max($('padsL').children.length, $('padsR').children.length, 1);
+  const padSize = Math.round(Math.max(96, Math.min(170, (innerHeight - hudHeight - 70) / perColumn - 14, innerWidth * .16)));
+  pads.forEach(p => { p.style.width = p.style.height = padSize + 'px'; });
+  const columns = ($('padsL').children.length ? 1 : 0) + ($('padsR').children.length ? 1 : 0);
+  const padsWidth = columns * (padSize + 14);
+  const key = [innerWidth, innerHeight, hudHeight, padsWidth].join();
+  if (S === lastFit.S && key === lastFit.key) return;
+  S = Math.floor(Math.min((innerWidth - 32 - padsWidth - PAD * 2) / COLS, (innerHeight - hudHeight - 80 - PAD * 2) / ROWS));
+  S = Math.max(S, 14);
   const dpr = devicePixelRatio || 1;
   const w = COLS * S + PAD * 2, h = ROWS * S + PAD * 2;
   canvas.style.width = w + 'px';
@@ -586,7 +1114,7 @@ function fit() {
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  lastFit = { S, w: innerWidth, h: innerHeight, hud: hudHeight };
+  lastFit = { S, key };
 }
 addEventListener('resize', fit);
 
@@ -609,7 +1137,7 @@ function drawMaze() {
 
 // Near an edge a player shows on both sides as they pass through the gap.
 function drawPlayer(p) {
-  const px = posX(p), py = posY(p);
+  const px = p.rx !== undefined ? p.rx : posX(p), py = p.ry !== undefined ? p.ry : posY(p);
   drawBody(p, px, py);
   if (px < 0) drawBody(p, px + COLS, py);
   if (px > COLS - 1) drawBody(p, px - COLS, py);
@@ -659,7 +1187,7 @@ function drawBody(p, px, py) {
 function drawRings() {
   for (const ring of rings) {
     const k = ring.age / .7;
-    ctx.globalAlpha = 1 - k;
+    ctx.globalAlpha = Math.max(0, 1 - k);
     ctx.strokeStyle = ring.color;
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -680,7 +1208,11 @@ let last = 0;
 function frame(now) {
   const dt = Math.min((now - last) / 1000 || 0, .05);
   last = now;
-  update(dt);
+  if (net.mode === 'guest') guestTick(dt);
+  else {
+    update(dt);
+    if (net.mode === 'host') hostTick(dt);
+  }
   draw();
   requestAnimationFrame(frame);
 }
@@ -688,6 +1220,9 @@ function frame(now) {
 renderOverlay();
 renderHud();
 requestAnimationFrame(frame);
+// A link with a game code on the end, like maze-catch/#ABCD, joins that game straight away.
+const hashCode = location.hash.match(/^#([A-HJ-NP-Z]{4})$/i);
+if (hashCode) joinGame(hashCode[1]);
 </script>
 </body>
 </html>
